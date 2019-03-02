@@ -4,6 +4,17 @@
  * @date 2019-03-02
  *
  * This is is the main driver file for the control appliction.
+ *
+ * TODO[joe]
+ *  -  Create a way to draw to the window.
+ *      -  Figure out how to draw text to the screen.
+ *  -  Create a way to access BlueTooth devices.
+ *      -  Figure out how to access list of BlueTooth devices.
+ *      -  Figure out how to search that list for a particular device.
+ *      -  Figure out how to open a port to that device.
+ *      -  Figure out how to set port profile.
+ *      -  Figure out how to send data to connected device.
+ *  -  Create a way to use keyboard input.
  */
 
 // Define the Unicode macro so that Windows knows what mode we're in.
@@ -13,7 +24,7 @@
 
 #include <windows.h>
 
-
+// NOTE[joe] These globals are temporary!
 static int ApplicationQuit;
 
 
