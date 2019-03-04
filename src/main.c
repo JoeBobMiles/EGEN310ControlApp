@@ -6,8 +6,7 @@
  * This is is the main driver file for the control appliction.
  *
  * TODO[joe]
- *  -  Create a way to draw to the window.
- *      -  Figure out how to draw text to the screen.
+ *  -  Figure out how to draw text to the screen.
  *  -  Create a way to access BlueTooth devices.
  *      -  Figure out how to access list of BlueTooth devices.
  *      -  Figure out how to search that list for a particular device.
@@ -37,6 +36,65 @@ LRESULT CALLBACK WindowProcedure(HWND Window,
 {
     switch (Message)
     {
+        case WM_PAINT:
+        {
+            PAINTSTRUCT PaintInfo;
+            HDC DeviceContext = BeginPaint(Window, &PaintInfo);
+
+            RECT WindowRect = { 0 };
+            GetWindowRect(Window, &WindowRect);
+
+            LONG WindowWidth = WindowRect.right - WindowRect.left;
+            LONG WindowHeight = WindowRect.bottom - WindowRect.top;
+
+            BITMAPINFO Info = { 0 };
+            BITMAPINFOHEADER BitmapHeader = { 0 };
+            BitmapHeader.biSize = sizeof(BITMAPINFOHEADER);
+            BitmapHeader.biWidth = WindowWidth;
+            /** NOTE[joe] Negative height => bitmap stored top-down.
+             * If the height is positive, Windows would default to treating
+             * the bitmap as if it were stored bottom-up. */
+            BitmapHeader.biHeight = -WindowHeight;
+            BitmapHeader.biBitCount = 32;
+            BitmapHeader.biPlanes = 1;
+            BitmapHeader.biSizeImage = WindowHeight * WindowWidth *
+                                       (BitmapHeader.biBitCount / 8);
+            BitmapHeader.biCompression = BI_RGB;
+
+            Info.bmiHeader = BitmapHeader;
+
+            int *Buffer = (int *) VirtualAlloc(0,
+                                               BitmapHeader.biSizeImage,
+                                               MEM_COMMIT | MEM_RESERVE,
+                                               PAGE_READWRITE);
+
+            for (unsigned int Y = 0; Y < WindowHeight; Y++)
+            {
+                for (unsigned int X = 0; X < WindowWidth; X++)
+                {
+                    int R = 0;
+                    int G = (X & 0xff);
+                    int B = (Y & 0xff);
+
+                    // NOTE[joe] Pixel memory looks like XXRRGGBB.
+                    Buffer[(Y * WindowWidth) + X] = (R << 16) |
+                                                    (G << 8) | B;
+                }
+            }
+
+            StretchDIBits(DeviceContext,
+                          // Destination location and size
+                          0, 0, WindowWidth, WindowHeight,
+                          // Source location and size
+                          0, 0, WindowWidth, WindowHeight,
+                          // Source memory
+                          Buffer,
+                          &Info,
+                          DIB_RGB_COLORS,
+                          SRCCOPY);
+
+            VirtualFree(Buffer, 0, MEM_RELEASE);
+        } break;
         case WM_CLOSE:
         case WM_DESTROY:
         {

@@ -3,10 +3,10 @@ build_dir = ./build
 src_dir = ./src
 
 binary = $(build_dir)/controlapp.exe
-libraries = user32
+libraries = user32 gdi32
 
 default: $(build_dir)
-	clang $(src_dir)/main.c -l $(libraries) -o $(binary)
+	clang -g -gcodeview $(src_dir)/main.c $(addprefix -l,$(libraries)) -o $(binary)
 
 $(build_dir):
 	mkdir -p $(build_dir)
