@@ -20,11 +20,16 @@
 #define UNICODE
 #endif
 
+// Generic Windows headers.
 #include <windows.h>
+// Windows networking headers.
 #include <winerror.h>
 #include <bthsdpdef.h>
 #include <bluetoothapis.h>
 #include <ws2bth.h>
+// Windows XInput header.
+#include <xinput.h>
+
 
 typedef struct backbuffer_s {
     BITMAPINFO Info;
@@ -43,6 +48,18 @@ static SOCKET BTSocket;
 static int XOffset;
 static int YOffset;
 static char LEDState;
+
+/** Stubbing XInputGetState() */
+typedef DWORD xinput_get_state(DWORD ControllerIndex, XINPUT_STATE *State);
+
+static
+DWORD XInputGetStateStub(DWORD ControllerIndex, XINPUT_STATE *State)
+{
+    return ERROR_DEVICE_NOT_CONNECTED;
+}
+
+static xinput_get_state *_XInputGetState = XInputGetStateStub;
+#define XInputGetState _XInputGetState
 
 /** This function writes our "structured art" background to the backbuffer that
  * we blit to the window that Windows gives us. */
@@ -96,6 +113,8 @@ void GetBackBuffer(LONG Width, LONG Height)
                                              PAGE_READWRITE);
 }
 
+/** This is sends the given data over our BlueTooth connection to our slave
+ * device. DataSize is the size of the data in bytes. */
 static
 int UpdateSlave(const char* Data, int DataSize)
 {
@@ -224,8 +243,6 @@ int WINAPI wWinMain(HINSTANCE Instance,        // Current instance handle.
 
     if (Window != NULL)
     {
-        ShowWindow(Window, ShowCommand);
-
         /** This is where we get Bluetooth setup before running the application
          * in its fullest. */
 
@@ -252,9 +269,6 @@ int WINAPI wWinMain(HINSTANCE Instance,        // Current instance handle.
 
             else
             {
-                // Output the name of the BlueTooth device we've connected to.
-                OutputDebugString(SelectDeviceParams.pDevices[0].szName);
-
                 BLUETOOTH_DEVICE_INFO_STRUCT Device =
                     SelectDeviceParams.pDevices[0];
 
@@ -297,23 +311,59 @@ int WINAPI wWinMain(HINSTANCE Instance,        // Current instance handle.
                         } break;
                     }
                 }
-
-                else
-                {
-                    OutputDebugString(L"Connection successful!\n");
-                }
             }
         }
+        /** END of BlueTooth setup. */
+
+        /** BEGIN XInput setup */
+
+        HINSTANCE XInputHandle = LoadLibrary(L"Xinput1_4");
+
+        if (XInputHandle == NULL)
+        {
+            // TODO[joe] Set flag indicating that there is no XInput?
+            OutputDebugString(L"Could not load XInput1_4.dll!\n");
+        }
+        else
+        {
+            OutputDebugString(L"XInput loaded!\n");
+
+            // Load the functions we need from the XInput DLL.
+            XInputGetState = (xinput_get_state *)
+                             GetProcAddress(XInputHandle, "XInputGetState");
+        }
+
+        /** END XInput setup */
+
+        ShowWindow(Window, ShowCommand);
 
         /** Begin the main GUI thread's loop. */
         while (!ApplicationQuit)
         {
+            // Handle Windows system messages.
             MSG Message = { 0 };
             while (PeekMessage(&Message, 0, 0, 0, PM_REMOVE))
             {
                 TranslateMessage(&Message);
                 DispatchMessage(&Message);
             }
+
+            // Handle controller state changes for all connected controllers.
+            for (DWORD i = 0; i < XUSER_MAX_COUNT; i++)
+            {
+                XINPUT_STATE ControllerState = { 0 };
+                DWORD ConnectionStatus = XInputGetState(i, &ControllerState);
+
+                if (ConnectionStatus == ERROR_SUCCESS) {
+                    // TODO[joe] Store controller input
+                    OutputDebugString(L"There is a controller connected!\n");
+                }
+
+                else
+                    OutputDebugString(L"No controller connected.\n");
+            }
+
+            // Perform application tasks.
 
             UpdateSlave(&LEDState, 1);
 
@@ -331,7 +381,13 @@ int WINAPI wWinMain(HINSTANCE Instance,        // Current instance handle.
                           SRCCOPY);
         }
 
+        /** BEGIN pre-exit maintenance.
+         * TODO[joe] The Casey on my shoulder nags that this is unnecissary. */
+
+        FreeLibrary(XInputHandle);
         WSACleanup();
+
+        /** END pre-exit maintenance. */
     }
 
     return 0;
