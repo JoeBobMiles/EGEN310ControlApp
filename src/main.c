@@ -45,6 +45,7 @@ static HDC DeviceContext;
 
 static SOCKET BTSocket;
 
+static int MaxOffset = 5;
 static int XOffset;
 static int YOffset;
 static char LEDState;
@@ -355,12 +356,14 @@ int WINAPI wWinMain(HINSTANCE Instance,        // Current instance handle.
                 DWORD ConnectionStatus = XInputGetState(i, &ControllerState);
 
                 if (ConnectionStatus == ERROR_SUCCESS) {
-                    // TODO[joe] Store controller input
-                    OutputDebugString(L"There is a controller connected!\n");
-                }
+                    SHORT RightStickX = ControllerState.Gamepad.sThumbRX;
+                    SHORT RightStickY = ControllerState.Gamepad.sThumbRY;
 
-                else
-                    OutputDebugString(L"No controller connected.\n");
+                    XOffset += (int)
+                               (((float)RightStickX/32767.0f)*(float)MaxOffset);
+                    YOffset += (int)
+                               (((float)RightStickY/32767.0f)*(float)MaxOffset);
+                }
             }
 
             // Perform application tasks.
