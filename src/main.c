@@ -8,7 +8,7 @@
  * TODO[joe]
  *  -  Limit framerate.
  *  -  Figure out latency issues.
- *  -  Figure out scheme for sending data accross.
+ *      - Might be due to data loss over network.
  *  -  Bluetooth:
  *      -  Attempt to reconnect if connection is lost.
  *      -  Indicate that we are connecting.

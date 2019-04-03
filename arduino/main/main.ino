@@ -1,3 +1,11 @@
+/*
+ * @file main.ino
+ * @author Joseph Miles <josephmiles2015@gmail.com>
+ * @date 2019-03-08
+ *
+ * This is our main driver for our Adafruit Feather microcontroller.
+ */
+
 #include <BluetoothSerial.h>
 #include <Adafruit_MotorShield.h>
 
