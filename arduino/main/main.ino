@@ -5,6 +5,13 @@
 #error Bluetooth is not enabled!
 #endif
 
+#define STATE_READY  0
+#define STATE_BEGIN  1
+#define STATE_READ   2
+#define STATE_DECIDE 3
+#define STATE_ACCEPT 4
+#define STATE_REJECT 5
+
 // Create a global reference to our BlueTooth radio.
 BluetoothSerial BT;
 
@@ -17,9 +24,17 @@ Adafruit_DCMotor *Motor2 = Shield.getMotor(3);
 // Save the pin address of the onboard LED
 int LED = 13;
 
+// BT Receiver state.
+// NOTE[joe] Largest payload we can receive is 255B.
+// We use 256B due to needing an extra byte for the null terminator.
+char ReceiveBuffer[256];
+char ReceiveBufferHead = 0;
+int ReceiverState = STATE_READY;
+int PayloadSize = 0;
+
 // Application state.
 int MotorSpeed = 0;
-int MotorDirection = 0;
+int MotorDirection = RELEASE;
 int ServoDirection = 0;
 
 /** Sets motors to given speed (limited to range between 0, 255) and direction.
@@ -88,49 +103,63 @@ void loop()
 
     else
     {
-        if (BT.available())
+        while (BT.available() > 0)
         {
-            switch ((int) BT.read())
+            if (ReceiverState == STATE_READY)
             {
-                case 1:
-                {
-                    MotorDirection = FORWARD;
-                } break;
+                char ReceivedData = BT.read();
 
-                case 2:
-                {
-                    MotorDirection = BACKWARD;
-                } break;
-
-                default:
-                {
-                    // NOTE[joe] If we don't know where we're going, don't go.
-                    // A safety measure more than anything else, as we don't
-                    // want the vehicle assuming it can go in a direction that
-                    // was not specified by the user.
-                    MotorDirection = RELEASE;
-                } break;
+                if (ReceivedData == '[')
+                    ReceiverState = STATE_BEGIN;
             }
-            Serial.print("Motor Direction: ");
-            Serial.println(MotorDirection);
 
-            ServoDirection = (int) BT.read();
-            Serial.print("Servo Direction: ");
-            Serial.println(ServoDirection);
+            if (ReceiverState == STATE_BEGIN && BT.peek() != -1)
+            {
+                PayloadSize = (int) BT.read();
+                ReceiverState = STATE_READ;
+            }
 
-            MotorSpeed = (int) BT.read();
-            Serial.print("Motor Speed: ");
-            Serial.println(MotorSpeed);
+            if (ReceiverState == STATE_READ && BT.peek() != -1)
+            {
+                if (ReceiveBufferHead < PayloadSize)
+                    ReceiveBuffer[ReceiveBufferHead++] = BT.read();
 
-            // NOTE[joe] Skip the padding of the instruction.
-            BT.read();
+                else
+                    ReceiverState = STATE_DECIDE;
+            }
+
+            if (ReceiverState == STATE_DECIDE && BT.peek() != -1)
+            {
+                if (BT.read() == ']')
+                {
+                    ReceiverState = STATE_ACCEPT;
+                    break;
+                }
+
+                else
+                {
+                    ReceiverState = STATE_READY;
+                    ReceiveBufferHead = 0;
+                }
+            }
+        }
+
+        // If we ACCEPT the received buffer, use the data we received.
+        if (ReceiverState == STATE_ACCEPT)
+        {
+            MotorDirection = ReceiveBuffer[0];
+            ServoDirection = ReceiveBuffer[1];
+            MotorSpeed     = ReceiveBuffer[2];
+
+            ReceiverState = STATE_READY;
+            ReceiveBufferHead = 0;
         }
 
         if (MotorSpeed == 0 || MotorDirection == RELEASE)
             ClearMotors();
 
         else
-            SetMotors(MotorSpeed, MotorSpeed);
+            SetMotors(MotorSpeed, MotorDirection);
 
         // TODO[joe] Set servo direction
     }
