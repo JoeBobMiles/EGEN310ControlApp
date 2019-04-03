@@ -6,13 +6,15 @@
  * This is is the main driver file for the control appliction.
  *
  * TODO[joe]
- *  -  Figure out how to draw text to the screen.
  *  -  Limit framerate.
+ *  -  Figure out latency issues.
+ *  -  Figure out scheme for sending data accross.
  *  -  Bluetooth:
  *      -  Attempt to reconnect if connection is lost.
  *      -  Indicate that we are connecting.
  *      -  Indicate that we have connected.
  *      -  Receive data via connection.
+ *  -  Figure out how to draw text to the screen.
  */
 
 // Define the Unicode macro so that Windows knows what mode we're in.
@@ -31,12 +33,22 @@
 #include <xinput.h>
 
 
+#define DEADZONE 100
+
+
 typedef struct backbuffer_s {
     BITMAPINFO Info;
     LONG       Width;
     LONG       Height;
     int       *Memory;
 } backbuffer;
+
+typedef struct instructions_s {
+    char MotorDirection;
+    char ServoDirection;
+    char MotorSpeed;
+    char Padding;
+} instructions;
 
 // NOTE[joe] These globals are temporary!
 static int ApplicationQuit;
@@ -48,7 +60,7 @@ static SOCKET BTSocket;
 static int MaxOffset = 5;
 static int XOffset;
 static int YOffset;
-static char LEDState;
+static char MotorState;
 
 /** Stubbing XInputGetState() */
 typedef DWORD xinput_get_state(DWORD ControllerIndex, XINPUT_STATE *State);
@@ -119,7 +131,21 @@ void GetBackBuffer(LONG Width, LONG Height)
 static
 int UpdateSlave(const char* Data, int DataSize)
 {
-    return send(BTSocket, Data, DataSize, 0);
+    // NOTE[joe] The packet is the data + start/end bytes and a byte for size.
+    int  BufferSize = DataSize + 3;
+    char Buffer[DataSize+3];
+
+    Buffer[0] = '[';
+    // NOTE[joe] Due to sending this as a char, payload is limited to 255B.
+    // TODO[joe] Error if DataSize > 255?
+    Buffer[1] = (char) DataSize;
+
+    for (int i = 0; i < DataSize; i++)
+        Buffer[i+2] = Data[i];
+
+    Buffer[BufferSize-1] = ']';
+
+    return send(BTSocket, Buffer, BufferSize, 0);
 }
 
 /** This is our window procedure, used by Windows whenever it wants us to stop
@@ -187,7 +213,6 @@ LRESULT CALLBACK WindowProcedure(HWND Window,
                 case VK_SPACE:
                 {
                     XOffset += 5;
-                    LEDState = 1;
                 } break;
             }
         } break;
@@ -198,7 +223,6 @@ LRESULT CALLBACK WindowProcedure(HWND Window,
             {
                 case VK_SPACE:
                 {
-                    LEDState = 0;
                 } break;
             }
         } break;
@@ -342,6 +366,7 @@ int WINAPI wWinMain(HINSTANCE Instance,        // Current instance handle.
         while (!ApplicationQuit)
         {
             // Handle Windows system messages.
+            // NOTE[joe] Is this what is causing us latency issues?
             MSG Message = { 0 };
             while (PeekMessage(&Message, 0, 0, 0, PM_REMOVE))
             {
@@ -349,12 +374,15 @@ int WINAPI wWinMain(HINSTANCE Instance,        // Current instance handle.
                 DispatchMessage(&Message);
             }
 
+            instructions Instructions = { 0 };
+
             // Handle controller state changes for all connected controllers.
             for (DWORD i = 0; i < XUSER_MAX_COUNT; i++)
             {
                 XINPUT_STATE ControllerState = { 0 };
                 DWORD ConnectionStatus = XInputGetState(i, &ControllerState);
 
+                // TODO[joe] Handle this inside a funtion?
                 if (ConnectionStatus == ERROR_SUCCESS) {
                     SHORT RightStickX = ControllerState.Gamepad.sThumbRX;
                     SHORT RightStickY = ControllerState.Gamepad.sThumbRY;
@@ -363,12 +391,32 @@ int WINAPI wWinMain(HINSTANCE Instance,        // Current instance handle.
                                (((float)RightStickX/32767.0f)*(float)MaxOffset);
                     YOffset += (int)
                                (((float)RightStickY/32767.0f)*(float)MaxOffset);
+
+                    if (RightStickY > DEADZONE)
+                        Instructions.MotorDirection = 1;
+
+                    else if (RightStickY < -DEADZONE)
+                        Instructions.MotorDirection = 2;
+
+                    if (RightStickX > DEADZONE || RightStickX < -DEADZONE)
+                    {
+                        Instructions.ServoDirection = (char)
+                                        (((float)RightStickX/32767.0f)*180.0f);
+                    }
+
+                    // TODO[joe] Figure out why this is fluxuating wildly.
+                    // The microcontroller sometimes receives 255 when the
+                    // trigger is all the way down, but there will be
+                    // interjections of 1's in the middle that make the motors
+                    // jump and skip.
+                    Instructions.MotorSpeed = (char)
+                                        ControllerState.Gamepad.bRightTrigger;
                 }
             }
 
             // Perform application tasks.
 
-            UpdateSlave(&LEDState, 1);
+            UpdateSlave((char *) &Instructions, sizeof(Instructions));
 
             DrawGradient(XOffset, YOffset);
 
