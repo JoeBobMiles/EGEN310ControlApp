@@ -84,6 +84,7 @@ void setup()
     digitalWrite(LED, LOW);
 
     // Start up a BT service, listing this device as ESP32
+    // TODO[joe] Come up with a more recognizable and creative name.
     BT.begin("ESP32");
     // Initialize connection with motor control sheild.
     Shield.begin();
@@ -111,6 +112,12 @@ void loop()
 
     else
     {
+        // NOTE[joe] If we don't empty the buffer, we will be stuck till reset!
+        // This is because available() checks to see if there is data in the
+        // BT radio's receive buffer. If we don't get rid of that data, the
+        // device will be perpetually stuck here! Thus, if we don't reset back
+        // to STATE_READY after ACCEPTing or REJECTing a buffer, our board will
+        // be stuck in an infinite loop till manual or watchdog reset.
         while (BT.available() > 0)
         {
             if (ReceiverState == STATE_READY)
@@ -144,7 +151,7 @@ void loop()
                     break;
                 }
 
-                else
+                else // REJECT received buffer.
                 {
                     ReceiverState = STATE_READY;
                     ReceiveBufferHead = 0;
@@ -155,10 +162,26 @@ void loop()
         // If we ACCEPT the received buffer, use the data we received.
         if (ReceiverState == STATE_ACCEPT)
         {
-            MotorDirection = ReceiveBuffer[0];
-            ServoDirection = ReceiveBuffer[1];
-            MotorSpeed     = ReceiveBuffer[2];
+            switch ((int) ReceiveBuffer[0])
+            {
+                case 1:
+                {
+                    MotorDirection = FORWARD;
+                } break;
+                case 2:
+                {
+                    MotorDirection = BACKWARD;
+                } break;
+                default:
+                {
+                    MotorDirection = RELEASE;
+                } break;
+            }
 
+            ServoDirection = (int) ReceiveBuffer[1];
+            MotorSpeed     = (int) ReceiveBuffer[2];
+
+            // Reset receiver so that we're READY to receive again.
             ReceiverState = STATE_READY;
             ReceiveBufferHead = 0;
         }
