@@ -148,6 +148,18 @@ int UpdateSlave(const char* Data, int DataSize)
     return send(BTSocket, Buffer, BufferSize, 0);
 }
 
+static
+int CompareInstructions(instructions A, instructions B)
+{
+    int Result = 0;
+
+    Result = A.MotorDirection != B.MotorDirection;
+    Result = Result || (A.ServoDirection != B.MotorDirection);
+    Result = Result || (A.MotorSpeed != B.MotorSpeed);
+
+    return Result;
+}
+
 /** This is our window procedure, used by Windows whenever it wants us to stop
  * what we're doing and do something for it. */
 LRESULT CALLBACK WindowProcedure(HWND Window,
@@ -362,6 +374,10 @@ int WINAPI wWinMain(HINSTANCE Instance,        // Current instance handle.
 
         ShowWindow(Window, ShowCommand);
 
+        // NOTE[joe] Used to indicate that controller state has changed.
+        int InstructionsChanged = 0;
+        instructions OldInstructions = { 0 };
+
         /** Begin the main GUI thread's loop. */
         while (!ApplicationQuit)
         {
@@ -377,6 +393,7 @@ int WINAPI wWinMain(HINSTANCE Instance,        // Current instance handle.
             instructions Instructions = { 0 };
 
             // Handle controller state changes for all connected controllers.
+            // NOTE[joe] There is only ever one controller, loop is not needed.
             for (DWORD i = 0; i < XUSER_MAX_COUNT; i++)
             {
                 XINPUT_STATE ControllerState = { 0 };
@@ -404,19 +421,20 @@ int WINAPI wWinMain(HINSTANCE Instance,        // Current instance handle.
                                         (((float)RightStickX/32767.0f)*180.0f);
                     }
 
-                    // TODO[joe] Figure out why this is fluxuating wildly.
-                    // The microcontroller sometimes receives 255 when the
-                    // trigger is all the way down, but there will be
-                    // interjections of 1's in the middle that make the motors
-                    // jump and skip.
                     Instructions.MotorSpeed = (char)
                                         ControllerState.Gamepad.bRightTrigger;
+
+                    InstructionsChanged = CompareInstructions(Instructions,
+                                                              OldInstructions);
+
+                    OldInstructions = Instructions;
                 }
             }
 
             // Perform application tasks.
 
-            UpdateSlave((char *) &Instructions, sizeof(Instructions));
+            if (InstructionsChanged)
+                UpdateSlave((char *) &Instructions, sizeof(Instructions));
 
             DrawGradient(XOffset, YOffset);
 
