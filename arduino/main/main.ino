@@ -44,10 +44,13 @@ char ReceiveBufferHead = 0;
 int ReceiverState = STATE_READY;
 int PayloadSize = 0;
 
+int LastReceivedToggle = 0;
+
 // Application state.
 int MotorSpeed = 0;
 int MotorDirection = RELEASE;
 int ServoDirection = 0;
+int RunWallClimber = 0;
 
 /** Sets motors to given speed (limited to range between 0, 255) and direction.
  * TODO[joe] Allow for the motors to be de-synchronized. */
@@ -188,9 +191,6 @@ void loop()
                 } break;
             }
 
-            Serial.print("Received: ");
-            Serial.println((int) ReceiveBuffer[1]);
-
             /*
             Note[joe] Duty cycle to angle equivalence:
               90 degrees = 2100us
@@ -202,10 +202,12 @@ void loop()
             ServoDirection *= 120.0f/18.0f;
             ServoDirection += 1500;
 
-            Serial.print("Converted to: ");
-            Serial.println(ServoDirection);
-
             MotorSpeed = (int) ReceiveBuffer[2];
+
+            if (ReceiveBuffer[3] && !LastReceivedToggle)
+                RunWallClimber = !RunWallClimber;
+
+            LastReceivedToggle = ReceiveBuffer[3];
 
             // Reset receiver so that we're READY to receive again.
             ReceiverState = STATE_READY;
@@ -219,5 +221,10 @@ void loop()
             SetMotors(MotorSpeed, MotorDirection);
 
         SteeringServo.writeMicroseconds(ServoDirection);
+
+        if (RunWallClimber)
+            digitalWrite(LED, HIGH);
+        else
+            digitalWrite(LED, LOW);
     }
 }

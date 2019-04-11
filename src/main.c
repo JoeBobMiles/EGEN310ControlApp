@@ -45,7 +45,8 @@ typedef struct instructions_s {
     char MotorDirection;
     char ServoDirection;
     char MotorSpeed;
-    char Padding;
+    char ToggleWallClimber;
+    char Sentinel;
 } instructions;
 
 // NOTE[joe] These globals are temporary!
@@ -420,12 +421,17 @@ int WINAPI wWinMain(HINSTANCE Instance,        // Current instance handle.
                         Direction *= 90.0f;
                         Instructions.ServoDirection = (char) Direction;
                     }
-                    
+
                     else
                         Instructions.ServoDirection = (char) 90;
 
                     Instructions.MotorSpeed = (char)
                                         ControllerState.Gamepad.bRightTrigger;
+
+                    int ButtonIsDown = ControllerState.Gamepad.wButtons &
+                                       XINPUT_GAMEPAD_A;
+                    Instructions.ToggleWallClimber = (char)
+                                                     (ButtonIsDown ? 1 : 0);
 
                     InstructionsChanged = CompareInstructions(Instructions,
                                                               OldInstructions);
