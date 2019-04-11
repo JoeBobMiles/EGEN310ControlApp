@@ -7,8 +7,6 @@
  *
  * TODO[joe]
  *  -  Limit framerate.
- *  -  Figure out latency issues.
- *      - Might be due to data loss over network.
  *  -  Bluetooth:
  *      -  Attempt to reconnect if connection is lost.
  *      -  Indicate that we are connecting.
@@ -417,9 +415,14 @@ int WINAPI wWinMain(HINSTANCE Instance,        // Current instance handle.
 
                     if (RightStickX > DEADZONE || RightStickX < -DEADZONE)
                     {
-                        Instructions.ServoDirection = (char)
-                                        (((float)RightStickX/32767.0f)*180.0f);
+                        float Direction = (float) RightStickX / 32767.0f;
+                        Direction += 1.0f;
+                        Direction *= 90.0f;
+                        Instructions.ServoDirection = (char) Direction;
                     }
+                    
+                    else
+                        Instructions.ServoDirection = (char) 90;
 
                     Instructions.MotorSpeed = (char)
                                         ControllerState.Gamepad.bRightTrigger;

@@ -8,6 +8,7 @@
 
 #include <BluetoothSerial.h>
 #include <Adafruit_MotorShield.h>
+#include <ESP32Servo.h>
 
 #if !defined(CONFIG_BT_ENABLED) || !defined(CONFIG_BLUEDROID_ENABLED)
 #error Bluetooth is not enabled!
@@ -28,6 +29,9 @@ Adafruit_MotorShield Shield = Adafruit_MotorShield();
 // TODO[joe] Store as an array of motors?
 Adafruit_DCMotor *Motor1 = Shield.getMotor(4);
 Adafruit_DCMotor *Motor2 = Shield.getMotor(3);
+
+// Create global reference to servo.
+Servo SteeringServo;
 
 // Save the pin address of the onboard LED
 int LED = 13;
@@ -84,13 +88,18 @@ void setup()
     digitalWrite(LED, LOW);
 
     // Start up a BT service, listing this device as ESP32
-    // TODO[joe] Come up with a more recognizable and creative name.
-    BT.begin("ESP32");
+    BT.begin("Calvin");
     // Initialize connection with motor control sheild.
     Shield.begin();
+    // Attach servo reference to the signal pin of the servo.
+    SteeringServo.attach(21);
 
     // Announce that we are done with initialization.
     Serial.println("Device has started!");
+
+    /** SERVO TEST CODE */
+
+    SteeringServo.writeMicroseconds(1500);
 }
 
 void loop()
@@ -99,6 +108,7 @@ void loop()
     if (!BT.hasClient())
     {
         ClearMotors();
+        SteeringServo.writeMicroseconds(1500);
 
         digitalWrite(LED, HIGH);
         delay(250);
@@ -178,8 +188,24 @@ void loop()
                 } break;
             }
 
+            Serial.print("Received: ");
+            Serial.println((int) ReceiveBuffer[1]);
+
+            /*
+            Note[joe] Duty cycle to angle equivalence:
+              90 degrees = 2100us
+               0 degrees = 1500us
+            - 90 degrees =  900us
+             */
             ServoDirection = (int) ReceiveBuffer[1];
-            MotorSpeed     = (int) ReceiveBuffer[2];
+            ServoDirection -= 90;
+            ServoDirection *= 120.0f/18.0f;
+            ServoDirection += 1500;
+
+            Serial.print("Converted to: ");
+            Serial.println(ServoDirection);
+
+            MotorSpeed = (int) ReceiveBuffer[2];
 
             // Reset receiver so that we're READY to receive again.
             ReceiverState = STATE_READY;
@@ -192,6 +218,6 @@ void loop()
         else
             SetMotors(MotorSpeed, MotorDirection);
 
-        // TODO[joe] Set servo direction
+        SteeringServo.writeMicroseconds(ServoDirection);
     }
 }
