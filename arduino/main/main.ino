@@ -29,6 +29,7 @@ Adafruit_MotorShield Shield = Adafruit_MotorShield();
 // TODO[joe] Store as an array of motors?
 Adafruit_DCMotor *Motor1 = Shield.getMotor(4);
 Adafruit_DCMotor *Motor2 = Shield.getMotor(3);
+Adafruit_StepperMotor *Stepper = Shield.getStepper(64, 1);
 
 // Create global reference to servo.
 Servo SteeringServo;
@@ -204,7 +205,7 @@ void loop()
 
             MotorSpeed = (int) ReceiveBuffer[2];
 
-            if (ReceiveBuffer[3] && !LastReceivedToggle)
+            if (ReceiveBuffer[3] == 1 && LastReceivedToggle == 0)
                 RunWallClimber = !RunWallClimber;
 
             LastReceivedToggle = ReceiveBuffer[3];
@@ -223,8 +224,6 @@ void loop()
         SteeringServo.writeMicroseconds(ServoDirection);
 
         if (RunWallClimber)
-            digitalWrite(LED, HIGH);
-        else
-            digitalWrite(LED, LOW);
+            Stepper->step(32, FORWARD, DOUBLE);
     }
 }
